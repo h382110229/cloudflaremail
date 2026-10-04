@@ -65,25 +65,7 @@ export async function POST(req: NextRequest) {
   const id = randomUUID();
   const text = email.text ?? "";
   const snippet = text.replace(/\s+/g, " ").slice(0, 200);
-
-  // 附件落盘
   const atts = email.attachments ?? [];
-  for (const [i, att] of atts.entries()) {
-    const dir = path.join(dataDir, "attachments", id);
-    await fs.mkdir(dir, { recursive: true });
-    const safeName = `${i}-${(att.filename ?? "attachment").replace(/[^\w.\-]/g, "_")}`;
-    const storagePath = path.join(dir, safeName);
-    const content = Buffer.from(att.content as ArrayBuffer);
-    await fs.writeFile(storagePath, content);
-    await db.insert(attachments).values({
-      id: randomUUID(),
-      messageId: id,
-      filename: att.filename ?? "attachment",
-      contentType: att.mimeType ?? "application/octet-stream",
-      size: content.byteLength,
-      storagePath,
-    });
-  }
 
   // 原始 MIME 存档（排障用）
   const rawDir = path.join(dataDir, "raw");
@@ -91,6 +73,8 @@ export async function POST(req: NextRequest) {
   const rawPath = path.join(rawDir, `${id}.eml`);
   await fs.writeFile(rawPath, raw);
 
+  // 先插 messages：attachments.message_id 有外键约束引用 messages.id，
+  // 顺序反了会 SQLITE_CONSTRAINT_FOREIGNKEY
   await db.insert(messages).values({
     id,
     mailboxId: mailbox.id,
@@ -111,6 +95,24 @@ export async function POST(req: NextRequest) {
     rawPath,
     createdAt: new Date(),
   });
+
+  // 附件落盘（message 已插入，外键满足）
+  for (const [i, att] of atts.entries()) {
+    const dir = path.join(dataDir, "attachments", id);
+    await fs.mkdir(dir, { recursive: true });
+    const safeName = `${i}-${(att.filename ?? "attachment").replace(/[^\w.\-]/g, "_")}`;
+    const storagePath = path.join(dir, safeName);
+    const content = Buffer.from(att.content as ArrayBuffer);
+    await fs.writeFile(storagePath, content);
+    await db.insert(attachments).values({
+      id: randomUUID(),
+      messageId: id,
+      filename: att.filename ?? "attachment",
+      contentType: att.mimeType ?? "application/octet-stream",
+      size: content.byteLength,
+      storagePath,
+    });
+  }
 
   return NextResponse.json({ ok: true, id });
 }
