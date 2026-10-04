@@ -21,6 +21,10 @@ COPY --from=builder /app/public ./public
 # 迁移 SQL 与启动脚本
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/scripts ./scripts
+# seed 脚本需要 src/ 与 drizzle-orm（standalone 只含被路由引用的依赖，这里补上）
+COPY --from=builder /app/src ./src
+COPY --from=builder /app/package.json ./package.json
+RUN npm install --no-save --no-audit --no-fund drizzle-orm
 # seed 脚本需要 tsx（dev 依赖未装进 runner，这里全局装一个）
 RUN npm install -g tsx
 VOLUME /data
