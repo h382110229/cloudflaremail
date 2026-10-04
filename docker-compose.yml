@@ -1,0 +1,22 @@
+services:
+  cloudflaremail:
+    build: .
+    image: cloudflaremail:latest
+    container_name: cloudflaremail
+    restart: unless-stopped
+    networks:
+      - homelab # 与 cloudflared 同一 Docker 网络，tunnel 内可直连 http://cloudflaremail:3000
+    volumes:
+      - cloudflaremail-data:/data # SQLite + 附件 + 原始邮件，持久化
+    env_file:
+      - .env # 服务器上从 .env.example 复制后填真值（不进仓库）
+    environment:
+      DATA_DIR: /data
+    # 不发布宿主机端口：公网访问走 Cloudflare Tunnel
+
+networks:
+  homelab:
+    external: true
+
+volumes:
+  cloudflaremail-data:
