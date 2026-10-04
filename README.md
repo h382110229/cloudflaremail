@@ -38,6 +38,23 @@ npm run db:push
 npm run dev
 ```
 
+## Docker 部署（推荐）
+
+```bash
+cp .env.example .env   # 填真值：RESEND_API_KEY、INBOUND_WEBHOOK_SECRET（openssl rand -hex 32）、
+                       # APP_URL=https://mail-app.hawkren.online、MAIL_FROM=hi@email.hawkren.online
+docker compose up -d --build
+```
+
+- 首次启动自动建表（`drizzle/0001_init.sql`，幂等）。
+- 数据持久化在 `cloudflaremail-data` volume（SQLite + 附件 + 原始邮件）。
+- 初始化邮箱账号：`docker compose exec cloudflaremail tsx scripts/seed.ts`
+  （`SEED_DOMAIN` / `SEED_MAILBOX` 可覆盖，默认 `hi@email.hawkren.online`）。
+- 公网访问走 Cloudflare Tunnel（复用已有 tunnel）：Zero Trust 仪表盘给 tunnel
+  加 public hostname `mail-app.hawkren.online` → `http://cloudflaremail:3000`
+  （与 cloudflared 同一 `homelab` Docker 网络，容器名直连）。
+
+```
 中转 Worker 部署（另起）：
 
 ```bash
