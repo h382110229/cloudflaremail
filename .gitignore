@@ -1,0 +1,21 @@
+# 依赖与构建产物
+node_modules/
+.next/
+out/
+dist/
+
+# 密钥与数据（本仓库是 public，这些永远不进 git）
+.env
+.env.*
+!.env.example
+data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Worker
+.wrangler/
+
+# 系统
+.DS_Store
