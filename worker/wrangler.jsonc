@@ -1,0 +1,11 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cloudflaremail-relay",
+  "main": "relay.ts",
+  "compatibility_date": "2026-10-01",
+  "vars": {
+    "APP_INBOUND_URL": "https://mail.example.com/api/inbound"
+  }
+  // INBOUND_WEBHOOK_SECRET 用 `npx wrangler secret put INBOUND_WEBHOOK_SECRET` 设置，
+  // 不要写进文件（本仓库是 public）。
+}
