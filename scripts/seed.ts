@@ -8,16 +8,20 @@ import { eq } from "drizzle-orm";
 import { db } from "../src/db/client";
 import { domains, mailboxes } from "../src/db/schema";
 
+type DomainRow = typeof domains.$inferSelect;
+
 const domain = (process.env.SEED_DOMAIN ?? "email.hawkren.online").toLowerCase();
 const localPart = (process.env.SEED_MAILBOX ?? "hi").toLowerCase();
 const address = `${localPart}@${domain}`;
 
 async function main() {
-  let d = await db.query.domains.findFirst({ where: eq(domains.domain, domain) });
+  let d: DomainRow | undefined = await db.query.domains.findFirst({
+    where: eq(domains.domain, domain),
+  });
   if (!d) {
-    const id = randomUUID();
-    await db.insert(domains).values({ id, domain, createdAt: new Date() });
-    d = { id, domain } as typeof d;
+    const newDomain: DomainRow = { id: randomUUID(), domain, createdAt: new Date() };
+    await db.insert(domains).values(newDomain);
+    d = newDomain;
     console.log(`+ 域名: ${domain}`);
   } else {
     console.log(`= 域名已存在: ${domain}`);
@@ -27,7 +31,7 @@ async function main() {
   if (!m) {
     await db.insert(mailboxes).values({
       id: randomUUID(),
-      domainId: d!.id,
+      domainId: d.id,
       localPart,
       address,
       createdAt: new Date(),
