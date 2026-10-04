@@ -43,7 +43,7 @@
 写信 UI → `POST /api/send`（登录态，Phase 2）→ `src/lib/resend.ts` → Resend API →
 返回 message id → 落库（`status=sent`）。
 
-发信域名用**子域**（如 `mail.hawkren.online`），与收信主域隔离发信信誉。
+收发同用一个子域 `email.hawkren.online`（自用流量小，无需做信誉隔离）。
 
 ## 4. 数据表（必读）
 
@@ -72,13 +72,15 @@ Worker 侧的同名 secret 用 `npx wrangler secret put` 单独设置。
 
 ## 7. DNS 清单
 
-以 `hawkren.online` 为例（按实际域名替换）：
+收发同用 `email.hawkren.online`（2026-10-04 确认）：
 
-- **MX**：Cloudflare 后台对域名启用 Email Routing，MX 自动接管，无需手填。
-- **发信子域**（如 `mail.hawkren.online`）：在 Resend 后台添加域名，
-  按它给出的记录逐条添加（SPF / DKIM / 回邮地址），验证通过后再发信。
-  不要猜记录值，以 Resend 后台显示为准。
-- **DMARC**（主域）：`_dmarc` TXT → `v=DMARC1; p=quarantine; rua=mailto:dmarc@hawkren.online`
+- **MX**：Cloudflare 后台给子域 `email.hawkren.online` 启用 Email Routing，
+  MX 自动接管，无需手填。
+- **发信验证**：Resend 后台添加域名 `email.hawkren.online`，
+  按它给出的记录逐条添加（SPF / DKIM），验证通过后再发信。
+  不要猜记录值，以 Resend 后台显示为准（支持 Cloudflare 自动配置）。
+- **DMARC**：`_dmarc.email.hawkren.online` TXT →
+  `v=DMARC1; p=quarantine; rua=mailto:dmarc@email.hawkren.online`
 - **应用域名**（如 `mail-app.hawkren.online`）：A/AAAA 指向自家服务器，
   Caddy 反代 `127.0.0.1:3000`，全站 HTTPS。
 
@@ -93,7 +95,7 @@ Worker 侧的同名 secret 用 `npx wrangler secret put` 单独设置。
 ## 9. 分阶段计划
 
 - **Phase 0** ✅ 骨架、设计、DNS 规划（当前）
-- **Phase 1** 收信管线端到端 + 只读收件箱 UI（列表/读信/附件下载）。
+- **Phase 1** 🚧 收信管线端到端 + 只读收件箱 UI（列表/读信/附件下载）。
   验收：从 Gmail 发一封带附件的信到自有域名，出现在收件箱。
 - **Phase 2** 发信 + 写信 UI（富文本、附件、回复/转发）。
   验收：发出的信到达 Gmail 且不在垃圾箱（SPF/DKIM/DMARC 对齐）。
