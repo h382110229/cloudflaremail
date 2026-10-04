@@ -84,13 +84,24 @@ Worker 侧的同名 secret 用 `npx wrangler secret put` 单独设置。
 - **应用域名**（如 `mail-app.hawkren.online`）：A/AAAA 指向自家服务器，
   Caddy 反代 `127.0.0.1:3000`，全站 HTTPS。
 
-## 8. 部署
+## 8. 部署（Docker + Tunnel，2026-10-04 定案）
 
-- 服务器要求：Node 20+；`better-sqlite3` 需要编译环境（`python3 + make + g++`，装一次）。
-- `npm ci && npm run build && npm start`（standalone 输出，也可直接 `node .next/standalone/server.js`）。
-- Caddy：`reverse_proxy 127.0.0.1:3000`。
-- 备份（cron 每天）：`sqlite3 data/mail.db ".backup 'data/mail-$(date +%F).db'"`，
-  连同 `data/attachments` 打包 → Google Drive。
+服务器无公网 IP，公网访问走 Cloudflare Tunnel（复用已有 tunnel，本机反代是 Traefik，不动它）。
+
+- 构建：`docker compose up -d --build`（多阶段构建，better-sqlite3 在构建阶段编译）。
+- 容器 `cloudflaremail` 加入已有的 `homelab` Docker 网络；tunnel 在 Zero Trust 仪表盘
+  加 public hostname `mail-app.hawkren.online` → `http://cloudflaremail:3000`
+  （容器名直连，不发布宿主机端口）。
+- 首次启动自动执行 `drizzle/0001_init.sql` 建表（`scripts/docker-entrypoint.mjs`，幂等）。
+- 数据持久化：`cloudflaremail-data` volume（SQLite + 附件 + 原始邮件）。
+- 初始化邮箱：`docker compose exec cloudflaremail tsx scripts/seed.ts`
+  （`SEED_DOMAIN` / `SEED_MAILBOX` 可覆盖）。
+- `.env` 在服务器上从 `.env.example` 复制后填真值（不进仓库）；
+  `APP_URL=https://mail-app.hawkren.online`。
+- 备份（cron 每天）：停容器后把 volume 打包
+  `docker run --rm -v cloudflaremail-data:/data -v $(pwd)/backup:/backup alpine tar czf /backup/mail-$(date +%F).tgz -C /data .`
+  再起容器，tgz 推到 Google Drive。
+- 公网暴露面的鉴权在 Phase 4 登录完成前用 Cloudflare Access 顶着。
 
 ## 9. 分阶段计划
 
