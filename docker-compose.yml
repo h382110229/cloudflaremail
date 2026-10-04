@@ -12,6 +12,9 @@ services:
       - .env # 服务器上从 .env.example 复制后填真值（不进仓库）
     environment:
       DATA_DIR: /data
+      # Next.js standalone 用 HOSTNAME 决定监听地址；Docker 默认把 HOSTNAME 设为容器 ID，
+      # 在开启 IPv6 的网络上会导致只绑 IPv6、IPv4 连接被拒（tunnel 走容器名解析到 IPv4 会 502）。
+      HOSTNAME: 0.0.0.0
     # 不发布宿主机端口：公网访问走 Cloudflare Tunnel
 
 networks:
