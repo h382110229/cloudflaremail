@@ -37,6 +37,7 @@ async function resolveMailbox(envelopeTo: string) {
 
 export async function POST(req: NextRequest) {
   if (!checkAuth(req)) {
+    console.warn(`[inbound] 401 host=${req.headers.get("host")} ip=${req.headers.get("cf-connecting-ip") ?? "?"}`);
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 
@@ -114,5 +115,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
+  console.log(`[inbound] OK id=${id} subject=${email.subject}`);
   return NextResponse.json({ ok: true, id });
 }
