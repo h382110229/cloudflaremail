@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
 
   // 回复线程头
   const headers: Record<string, string> = {};
-  let threadId = randomUUID();
+  let threadId: string = randomUUID();
   if (body.inReplyTo) {
     const orig = await db.query.messages.findFirst({
       where: eq(messages.id, body.inReplyTo),
