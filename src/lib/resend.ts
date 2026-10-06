@@ -7,10 +7,12 @@ export interface SendEmailInput {
   from: string;
   to: string[];
   cc?: string[];
+  bcc?: string[];
   subject: string;
   html?: string;
   text?: string;
   replyTo?: string;
+  headers?: Record<string, string>;
   attachments?: { filename: string; content: Buffer }[];
 }
 
@@ -36,19 +38,23 @@ export async function sendEmail(input: SendEmailInput): Promise<string> {
         from: input.from,
         to: input.to,
         cc: input.cc,
+        bcc: input.bcc,
         subject: input.subject,
         html: input.html,
         text: input.text,
         replyTo: input.replyTo,
+        headers: input.headers,
         attachments,
       }
     : {
         from: input.from,
         to: input.to,
         cc: input.cc,
+        bcc: input.bcc,
         subject: input.subject,
         text: input.text ?? "",
         replyTo: input.replyTo,
+        headers: input.headers,
         attachments,
       };
 
