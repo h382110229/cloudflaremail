@@ -15,6 +15,7 @@ interface SendAttachment {
 }
 
 interface SendBody {
+  from?: string; // 发件邮箱地址，必须是已存在的 mailbox；不传则用第一个
   to: string[];
   cc?: string[];
   bcc?: string[];
@@ -52,8 +53,22 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "正文不能为空" }, { status: 400 });
   }
 
-  // 发件邮箱：取第一个 mailbox
-  const mailbox = await db.query.mailboxes.findFirst();
+  // 发件邮箱：body.from 优先，必须是已存在的 mailbox；不传则用第一个
+  let mailbox = null;
+  const fromParam = (body.from ?? "").trim().toLowerCase();
+  if (fromParam) {
+    if (!EMAIL_RE.test(fromParam)) {
+      return NextResponse.json({ error: `发件邮箱格式错误: ${body.from}` }, { status: 400 });
+    }
+    mailbox = await db.query.mailboxes.findFirst({
+      where: eq(mailboxes.address, fromParam),
+    });
+    if (!mailbox) {
+      return NextResponse.json({ error: `发件邮箱不存在: ${fromParam}` }, { status: 400 });
+    }
+  } else {
+    mailbox = await db.query.mailboxes.findFirst();
+  }
   if (!mailbox) {
     return NextResponse.json({ error: "no mailbox" }, { status: 500 });
   }

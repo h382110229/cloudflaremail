@@ -31,11 +31,18 @@ interface MessageDetail extends MessageSummary {
 
 interface ComposeState {
   mode: "new" | "reply" | "forward";
+  from: string; // 发件邮箱地址
   to: string;
   cc: string;
   subject: string;
   body: string;
   inReplyTo?: string;
+}
+
+interface Mailbox {
+  id: string;
+  address: string;
+  localPart: string;
 }
 
 function fmtDate(iso: string | null): string {
@@ -69,11 +76,15 @@ export default function Mail() {
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState("");
   const [files, setFiles] = useState<File[]>([]);
+  const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
+  const [mailboxId, setMailboxId] = useState<string>("");
 
-  const loadMessages = (f: "received" | "sent") => {
+  const loadMessages = (f: "received" | "sent", mid?: string) => {
     setLoading(true);
     setError("");
-    fetch(`/api/messages?status=${f}`)
+    const q = new URLSearchParams({ status: f });
+    if (mid) q.set("mailboxId", mid);
+    fetch(`/api/messages?${q}`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -83,10 +94,36 @@ export default function Mail() {
       .finally(() => setLoading(false));
   };
 
+  // 加载邮箱列表，恢复上次选择的邮箱
   useEffect(() => {
-    loadMessages(folder);
+    fetch("/api/mailboxes")
+      .then((r) => r.json())
+      .then((d) => {
+        const list: Mailbox[] = d.mailboxes ?? [];
+        setMailboxes(list);
+        const saved = localStorage.getItem("mailboxId") ?? "";
+        const initial = list.some((m) => m.id === saved) ? saved : (list[0]?.id ?? "");
+        setMailboxId(initial);
+        if (initial) localStorage.setItem("mailboxId", initial);
+        loadMessages(folder, initial);
+      })
+      .catch(() => loadMessages(folder));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folder]);
+  }, []);
+
+  useEffect(() => {
+    if (mailboxId) loadMessages(folder, mailboxId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [folder, mailboxId]);
+
+  const switchMailbox = (id: string) => {
+    setMailboxId(id);
+    localStorage.setItem("mailboxId", id);
+    setSelected(null);
+  };
+
+  const currentMailbox = mailboxes.find((m) => m.id === mailboxId);
+  const defaultFrom = currentMailbox?.address ?? mailboxes[0]?.address ?? "";
 
   const openMessage = async (id: string) => {
     setSelected(null);
@@ -107,6 +144,7 @@ export default function Mail() {
       .join("\n");
     setCompose({
       mode: "reply",
+      from: defaultFrom,
       to: m.fromAddr,
       cc: "",
       subject: m.subject.startsWith("Re:") ? m.subject : `Re: ${m.subject}`,
@@ -121,6 +159,7 @@ export default function Mail() {
     const origText = m.bodyText ?? (m.bodyHtml ? stripHtml(m.bodyHtml) : "");
     setCompose({
       mode: "forward",
+      from: defaultFrom,
       to: "",
       cc: "",
       subject: m.subject.startsWith("Fwd:") ? m.subject : `Fwd: ${m.subject}`,
@@ -160,6 +199,7 @@ export default function Mail() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
+          from: compose.from,
           to,
           cc: compose.cc.split(/[,;]\s*/).map((s) => s.trim()).filter(Boolean),
           subject: compose.subject,
@@ -172,7 +212,7 @@ export default function Mail() {
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
       setCompose(null);
       setFiles([]);
-      if (folder === "sent") loadMessages("sent");
+      if (folder === "sent") loadMessages("sent", mailboxId);
     } catch (e) {
       setSendError(String((e as Error).message ?? e));
     } finally {
@@ -207,6 +247,18 @@ export default function Mail() {
           {sendError && (
             <div className="mb-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{sendError}</div>
           )}
+          <div className="mb-2 flex items-center gap-2 border-b py-2">
+            <span className="w-12 shrink-0 text-sm text-gray-500">发件人</span>
+            <select
+              value={compose.from}
+              onChange={(e) => setCompose({ ...compose, from: e.target.value })}
+              className="flex-1 bg-transparent text-sm outline-none"
+            >
+              {mailboxes.map((m) => (
+                <option key={m.id} value={m.address}>{m.address}</option>
+              ))}
+            </select>
+          </div>
           <div className="mb-2 flex items-center gap-2 border-b py-2">
             <span className="w-12 shrink-0 text-sm text-gray-500">收件人</span>
             <input
@@ -336,8 +388,18 @@ export default function Mail() {
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="sticky top-0 z-10 border-b bg-white/95 px-4 py-3 backdrop-blur">
-        <div className="flex items-center justify-between">
-          <div className="flex gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-1">
+            <select
+              value={mailboxId}
+              onChange={(e) => switchMailbox(e.target.value)}
+              className="max-w-[180px] truncate rounded-lg border border-gray-200 bg-gray-50 px-2 py-1.5 text-sm font-medium text-gray-700 outline-none"
+              title="切换邮箱"
+            >
+              {mailboxes.map((m) => (
+                <option key={m.id} value={m.id}>{m.address}</option>
+              ))}
+            </select>
             <button
               onClick={() => setFolder("received")}
               className={`rounded-lg px-3 py-1.5 text-sm font-medium ${folder === "received" ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-100"}`}
@@ -352,8 +414,8 @@ export default function Mail() {
             </button>
           </div>
           <button
-            onClick={() => { setCompose({ mode: "new", to: "", cc: "", subject: "", body: "" }); setFiles([]); setSendError(""); }}
-            className="rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
+            onClick={() => { setCompose({ mode: "new", from: defaultFrom, to: "", cc: "", subject: "", body: "" }); setFiles([]); setSendError(""); }}
+            className="shrink-0 rounded-lg bg-blue-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-blue-700"
           >
             ✏️ 写邮件
           </button>
@@ -364,7 +426,7 @@ export default function Mail() {
         {error && <p className="p-6 text-center text-sm text-red-500">{error}</p>}
         {!loading && !error && messages.length === 0 && (
           <p className="p-6 text-center text-sm text-gray-400">
-            {folder === "received" ? "还没有邮件。从 Gmail 发一封到你的域名邮箱试试。" : "还没有已发送邮件。"}
+            {folder === "received" ? `还没有邮件。从 Gmail 发一封到 ${currentMailbox?.address ?? "你的域名邮箱"} 试试。` : "还没有已发送邮件。"}
           </p>
         )}
         <ul className="flex flex-col gap-1.5">
