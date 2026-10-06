@@ -18,6 +18,25 @@ services:
       HOSTNAME: "::"
     # 不发布宿主机端口：公网访问走 Cloudflare Tunnel
 
+  # SMTP 提交服务器：其他服务经标准 SMTP 协议发信（587 + AUTH → 转 Resend）
+  smtp:
+    build: .
+    image: cloudflaremail:latest
+    container_name: cloudflaremail-smtp
+    restart: unless-stopped
+    command: ["node", "./smtp/server.mjs"]
+    networks:
+      - homelab
+    volumes:
+      - cloudflaremail-data:/data
+    env_file:
+      - .env
+    environment:
+      DATA_DIR: /data
+    ports:
+      # 服务器无公网 IP，只暴露给内网（192.168.31.x）；必须 AUTH，无开放中继风险
+      - "587:587"
+
 networks:
   homelab:
     external: true

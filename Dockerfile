@@ -21,10 +21,12 @@ COPY --from=builder /app/public ./public
 # 迁移 SQL 与启动脚本
 COPY --from=builder /app/drizzle ./drizzle
 COPY --from=builder /app/scripts ./scripts
+# SMTP 提交服务器（独立进程，与 Next.js 共用镜像）
+COPY --from=builder /app/smtp ./smtp
 # seed 脚本需要 src/ 与 drizzle-orm（standalone 只含被路由引用的依赖，这里补上）
 COPY --from=builder /app/src ./src
 COPY --from=builder /app/package.json ./package.json
-RUN npm install --no-save --no-audit --no-fund drizzle-orm
+RUN npm install --no-save --no-audit --no-fund drizzle-orm smtp-server selfsigned postal-mime
 # seed 脚本需要 tsx（dev 依赖未装进 runner，这里全局装一个）
 RUN npm install -g tsx
 VOLUME /data
