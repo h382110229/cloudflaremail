@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { messages } from "@/db/schema";
 
@@ -10,11 +10,15 @@ export const runtime = "nodejs";
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const mailboxId = searchParams.get("mailboxId");
+  const status = searchParams.get("status");
   const limit = Math.min(Number(searchParams.get("limit") ?? 50) || 50, 200);
   const offset = Number(searchParams.get("offset") ?? 0) || 0;
 
+  const conds = [];
+  if (mailboxId) conds.push(eq(messages.mailboxId, mailboxId));
+  if (status) conds.push(eq(messages.status, status));
   const rows = await db.query.messages.findMany({
-    where: mailboxId ? eq(messages.mailboxId, mailboxId) : undefined,
+    where: conds.length ? and(...conds) : undefined,
     orderBy: [desc(messages.date)],
     limit,
     offset,
