@@ -1,10 +1,51 @@
 @import "tailwindcss";
 
-/* 邮件正文渲染：约束图片宽度，防止撑破布局 */
+/* Hawk 个人品牌设计规范 v2.2（黑金青绿） */
+@theme {
+  --color-obsidian: #080B0C;
+  --color-graphite: #111719;
+  --color-charcoal: #1A2424;
+  --color-gold: #D6AD5C;
+  --color-gold-dim: #B8934A;
+  --color-teal: #39C7B0;
+  --color-ivory: #F3EFE5;
+  --color-slate: #8A9494;
+  --color-err: #BE1D5D;
+  --color-warn: #F4A259;
+  --font-sans: "Inter", "-apple-system", "PingFang SC", "Noto Sans SC", "sans-serif";
+}
+
+body {
+  background: var(--color-obsidian);
+  color: var(--color-ivory);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* 邮件正文渲染：约束图片宽度，防止撑破布局；深色适配 */
 .mail-body img {
   max-width: 100%;
   height: auto;
 }
 .mail-body table {
   max-width: 100%;
+}
+.mail-body {
+  color: var(--color-ivory);
+}
+.mail-body a {
+  color: var(--color-teal);
+}
+
+/* 细滚动条 */
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #2A3535;
+  border-radius: 8px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
