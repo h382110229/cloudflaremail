@@ -6,6 +6,7 @@ interface MessageSummary {
   id: string;
   fromAddr: string;
   fromName: string | null;
+  toAddrs: string;
   subject: string;
   snippet: string;
   date: string | null;
@@ -155,21 +156,52 @@ export default function Mail() {
   const [files, setFiles] = useState<File[]>([]);
   const [mailboxes, setMailboxes] = useState<Mailbox[]>([]);
   const [mailboxId, setMailboxId] = useState<string>("");
+  const [queryInput, setQueryInput] = useState("");
+  const [query, setQuery] = useState("");
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const PAGE = 50;
 
-  const loadMessages = (f: "received" | "sent", mid?: string) => {
-    setLoading(true);
-    setError("");
-    const q = new URLSearchParams({ status: f });
-    if (mid) q.set("mailboxId", mid);
-    fetch(`/api/messages?${q}`)
+  const loadMessages = (f: "received" | "sent", mid?: string, q?: string, off?: number, append?: boolean) => {
+    if (append) setLoadingMore(true);
+    else {
+      setLoading(true);
+      setError("");
+    }
+    const params = new URLSearchParams({ status: f, limit: String(PAGE), offset: String(off ?? 0) });
+    if (mid) params.set("mailboxId", mid);
+    if (q) params.set("q", q);
+    fetch(`/api/messages?${params}`)
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
       })
-      .then((d) => setMessages(d.messages ?? []))
+      .then((d) => {
+        const list = d.messages ?? [];
+        setMessages((prev) => (append ? [...prev, ...list] : list));
+        setHasMore(list.length >= PAGE);
+      })
       .catch((e) => setError(String(e.message ?? e)))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setLoadingMore(false);
+      });
   };
+
+  const reload = (f = folder, mid = mailboxId, q = query) => {
+    setSelected(null);
+    loadMessages(f, mid, q, 0, false);
+  };
+
+  const loadMore = () => {
+    loadMessages(folder, mailboxId, query, messages.length, true);
+  };
+
+  // 搜索防抖
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(queryInput.trim()), 400);
+    return () => clearTimeout(t);
+  }, [queryInput]);
 
   useEffect(() => {
     fetch("/api/mailboxes")
@@ -181,21 +213,22 @@ export default function Mail() {
         const initial = list.some((m) => m.id === saved) ? saved : (list[0]?.id ?? "");
         setMailboxId(initial);
         if (initial) localStorage.setItem("mailboxId", initial);
-        loadMessages(folder, initial);
+        loadMessages(folder, initial, "", 0, false);
       })
-      .catch(() => loadMessages(folder));
+      .catch(() => loadMessages(folder, "", "", 0, false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (mailboxId) loadMessages(folder, mailboxId);
+    if (mailboxId) reload(folder, mailboxId, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [folder, mailboxId]);
+  }, [folder, mailboxId, query]);
 
   const switchMailbox = (id: string) => {
     setMailboxId(id);
     localStorage.setItem("mailboxId", id);
-    setSelected(null);
+    setQueryInput("");
+    setQuery("");
   };
 
   const currentMailbox = mailboxes.find((m) => m.id === mailboxId);
@@ -293,7 +326,7 @@ export default function Mail() {
       if (!r.ok) throw new Error(d.error ?? `HTTP ${r.status}`);
       setCompose(null);
       setFiles([]);
-      if (folder === "sent") loadMessages("sent", mailboxId);
+      if (folder === "sent") reload("sent", mailboxId, query);
     } catch (e) {
       setSendError(String((e as Error).message ?? e));
     } finally {
@@ -535,7 +568,7 @@ export default function Mail() {
             return (
               <button
                 key={f}
-                onClick={() => { setFolder(f); setSelected(null); }}
+                onClick={() => { setFolder(f); setSelected(null); setQueryInput(""); setQuery(""); }}
                 className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
                   active ? "bg-gold/15 text-gold" : "text-slate hover:bg-white/5 hover:text-ivory"
                 }`}
@@ -588,7 +621,7 @@ export default function Mail() {
               {(Object.keys(folderMeta) as Array<"received" | "sent">).map((f) => (
                 <button
                   key={f}
-                  onClick={() => setFolder(f)}
+                  onClick={() => { setFolder(f); setQueryInput(""); setQuery(""); }}
                   className={`rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition ${
                     folder === f ? "bg-gold text-obsidian font-bold" : "text-slate hover:text-ivory"
                   }`}
@@ -598,6 +631,15 @@ export default function Mail() {
               ))}
             </div>
             <div className="flex-1" />
+            <div className="relative w-32 shrink-0 md:hidden">
+              <input
+                value={queryInput}
+                onChange={(e) => setQueryInput(e.target.value)}
+                placeholder="搜索…"
+                className="w-full rounded-lg bg-charcoal py-1.5 pl-8 pr-2 text-[13px] text-ivory outline-none placeholder:text-slate/60"
+              />
+              <svg className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.9 3.5l4.3 4.3a1 1 0 01-1.4 1.4l-4.3-4.3A6 6 0 012 8z" clipRule="evenodd" /></svg>
+            </div>
             <button
               onClick={startNew}
               className="flex items-center gap-1 rounded-lg bg-gold px-3 py-1.5 text-[13px] font-bold text-obsidian"
@@ -607,14 +649,35 @@ export default function Mail() {
           </div>
         </header>
 
-        {/* 桌面端标题 */}
+        {/* 桌面端标题 + 搜索 */}
         <div className="hidden border-b border-white/10 px-8 py-5 md:block">
-          <h1 className="text-xl font-bold text-ivory">{folderMeta[folder].label}</h1>
-          <p className="mt-0.5 truncate text-[13px] text-slate">
-            {currentMailbox?.address}
-            <span className="mx-2 text-teal">·</span>
-            <span className="text-gold">SIMPLE TOOLS. A BRIGHTER TOMORROW</span>
-          </p>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <h1 className="text-xl font-bold text-ivory">{folderMeta[folder].label}</h1>
+              <p className="mt-0.5 truncate text-[13px] text-slate">
+                {currentMailbox?.address}
+                <span className="mx-2 text-teal">·</span>
+                <span className="text-gold">SIMPLE TOOLS. A BRIGHTER TOMORROW</span>
+              </p>
+            </div>
+            <div className="relative w-64 shrink-0">
+              <input
+                value={queryInput}
+                onChange={(e) => setQueryInput(e.target.value)}
+                placeholder="搜索邮件…"
+                className="w-full rounded-[10px] border border-white/10 bg-charcoal py-2 pl-9 pr-8 text-sm text-ivory outline-none transition placeholder:text-slate/60 focus:border-gold/50"
+              />
+              <svg className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate" viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.9 3.5l4.3 4.3a1 1 0 01-1.4 1.4l-4.3-4.3A6 6 0 012 8z" clipRule="evenodd" /></svg>
+              {queryInput && (
+                <button
+                  onClick={() => { setQueryInput(""); setQuery(""); }}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate hover:text-ivory"
+                >
+                  {Icon.x("h-3.5 w-3.5")}
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         <main className="mx-auto w-full max-w-3xl flex-1 px-3 py-4 sm:px-6 md:px-8">
@@ -627,7 +690,7 @@ export default function Mail() {
           {error && (
             <div className="rounded-2xl border border-err/40 bg-err/10 px-5 py-4 text-sm text-err">{error}</div>
           )}
-          {!loading && !error && messages.length === 0 && (
+          {!loading && !error && messages.length === 0 && !query && (
             <div className="flex flex-col items-center gap-3 rounded-2xl border border-dashed border-white/15 bg-graphite/50 px-6 py-16 text-center">
               <BrandMark />
               <p className="text-sm font-medium text-ivory">
@@ -643,7 +706,7 @@ export default function Mail() {
           <ul className="flex flex-col gap-2">
             {messages.map((m) => {
               const seed = folder === "sent" ? m.subject : (m.fromName || m.fromAddr);
-              const who = folder === "sent" ? m.subject : (m.fromName || m.fromAddr);
+              const isSent = folder === "sent";
               return (
                 <li key={m.id}>
                   <button
@@ -653,15 +716,21 @@ export default function Mail() {
                     <Avatar seed={seed} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="truncate text-sm font-semibold text-ivory">{who}</span>
+                        <span className="truncate text-sm font-semibold text-ivory">
+                          {isSent ? (m.subject || "(无主题)") : (m.fromName || m.fromAddr)}
+                        </span>
                         <span className="shrink-0 text-xs tabular-nums text-slate">{fmtDate(m.date)}</span>
                       </div>
-                      <div className="mt-0.5 truncate text-sm text-ivory/70">
-                        {folder === "sent" ? m.snippet : (m.subject || "(无主题)")}
-                      </div>
+                      {isSent ? (
+                        <div className="mt-0.5 truncate text-[13px] text-teal/90">
+                          收件人：{m.toAddrs || "—"}
+                        </div>
+                      ) : (
+                        <div className="mt-0.5 truncate text-sm text-ivory/70">{m.subject || "(无主题)"}</div>
+                      )}
                       <div className="mt-0.5 flex items-center gap-1.5 truncate text-[13px] text-slate">
                         {m.hasAttachments ? <span className="shrink-0">{Icon.attach("h-3.5 w-3.5")}</span> : null}
-                        <span className="truncate">{folder === "sent" ? "" : m.snippet}</span>
+                        <span className="truncate">{m.snippet}</span>
                       </div>
                     </div>
                   </button>
@@ -669,6 +738,28 @@ export default function Mail() {
               );
             })}
           </ul>
+          {!loading && !error && hasMore && (
+            <div className="mt-4 text-center">
+              <button
+                onClick={loadMore}
+                disabled={loadingMore}
+                className="rounded-lg border border-white/10 bg-graphite px-6 py-2 text-sm font-medium text-slate transition hover:border-gold/30 hover:text-gold disabled:opacity-50"
+              >
+                {loadingMore ? "加载中…" : "加载更多"}
+              </button>
+            </div>
+          )}
+          {!loading && !error && query && messages.length === 0 && (
+            <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-white/15 bg-graphite/50 px-6 py-12 text-center">
+              <p className="text-sm font-medium text-ivory">没有找到匹配「{query}」的邮件</p>
+              <button
+                onClick={() => { setQueryInput(""); setQuery(""); }}
+                className="text-[13px] text-gold hover:underline"
+              >
+                清除搜索
+              </button>
+            </div>
+          )}
         </main>
       </div>
     </div>
