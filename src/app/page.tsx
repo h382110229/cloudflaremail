@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 
 interface MessageSummary {
   id: string;
+  mailboxId: string;
   fromAddr: string;
   fromName: string | null;
   toAddrs: string;
@@ -209,18 +210,21 @@ export default function Mail() {
       .then((d) => {
         const list: Mailbox[] = d.mailboxes ?? [];
         setMailboxes(list);
-        const saved = localStorage.getItem("mailboxId") ?? "";
-        const initial = list.some((m) => m.id === saved) ? saved : (list[0]?.id ?? "");
-        setMailboxId(initial);
-        if (initial) localStorage.setItem("mailboxId", initial);
-        loadMessages(folder, initial, "", 0, false);
+        // "" = 全部邮箱总览；localStorage 无值时默认总览
+        const saved = localStorage.getItem("mailboxId");
+        const initial = saved === null ? "" : saved;
+        const valid = initial === "" || list.some((m) => m.id === initial);
+        const mid = valid ? initial : "";
+        setMailboxId(mid);
+        localStorage.setItem("mailboxId", mid);
+        loadMessages(folder, mid, "", 0, false);
       })
       .catch(() => loadMessages(folder, "", "", 0, false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (mailboxId) reload(folder, mailboxId, query);
+    reload(folder, mailboxId, query);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [folder, mailboxId, query]);
 
@@ -233,6 +237,11 @@ export default function Mail() {
 
   const currentMailbox = mailboxes.find((m) => m.id === mailboxId);
   const defaultFrom = currentMailbox?.address ?? mailboxes[0]?.address ?? "";
+  const isAll = mailboxId === "";
+  const mailboxOf = (mid: string) => mailboxes.find((m) => m.id === mid);
+  const boxLabel = isAll
+    ? "全部邮箱"
+    : (currentMailbox?.address ?? "");
 
   const openMessage = async (id: string) => {
     setSelected(null);
@@ -590,6 +599,7 @@ export default function Mail() {
               className="w-full appearance-none truncate rounded-[10px] border border-white/10 bg-charcoal py-2.5 pl-3 pr-9 text-[13px] font-medium text-ivory outline-none transition hover:border-white/20 focus:border-gold/50 [&>option]:bg-graphite"
               title="切换邮箱"
             >
+              <option value="">全部邮箱 · 总览</option>
               {mailboxes.map((m) => (
                 <option key={m.id} value={m.id}>{m.address}</option>
               ))}
@@ -613,6 +623,7 @@ export default function Mail() {
               className="max-w-[140px] truncate rounded-lg bg-charcoal px-2 py-1.5 text-[13px] font-medium text-ivory outline-none [&>option]:bg-graphite"
               title="切换邮箱"
             >
+              <option value="">全部邮箱</option>
               {mailboxes.map((m) => (
                 <option key={m.id} value={m.id}>{m.address}</option>
               ))}
@@ -655,7 +666,7 @@ export default function Mail() {
             <div>
               <h1 className="text-xl font-bold text-ivory">{folderMeta[folder].label}</h1>
               <p className="mt-0.5 truncate text-[13px] text-slate">
-                {currentMailbox?.address}
+                {boxLabel}
                 <span className="mx-2 text-teal">·</span>
                 <span className="text-gold">SIMPLE TOOLS. A BRIGHTER TOMORROW</span>
               </p>
@@ -698,7 +709,7 @@ export default function Mail() {
               </p>
               <p className="max-w-xs text-[13px] text-slate">
                 {folder === "received"
-                  ? `从 Gmail 发一封到 ${currentMailbox?.address ?? "你的域名邮箱"} 试试`
+                  ? `从 Gmail 发一封到 ${isAll ? "任一域名邮箱" : (currentMailbox?.address ?? "你的域名邮箱")} 试试`
                   : "点「写邮件」发出第一封吧"}
               </p>
             </div>
@@ -707,6 +718,7 @@ export default function Mail() {
             {messages.map((m) => {
               const seed = folder === "sent" ? m.subject : (m.fromName || m.fromAddr);
               const isSent = folder === "sent";
+              const tag = isAll ? mailboxOf(m.mailboxId)?.localPart : null;
               return (
                 <li key={m.id}>
                   <button
@@ -716,8 +728,15 @@ export default function Mail() {
                     <Avatar seed={seed} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-3">
-                        <span className="truncate text-sm font-semibold text-ivory">
-                          {isSent ? (m.subject || "(无主题)") : (m.fromName || m.fromAddr)}
+                        <span className="flex min-w-0 items-baseline gap-2">
+                          <span className="truncate text-sm font-semibold text-ivory">
+                            {isSent ? (m.subject || "(无主题)") : (m.fromName || m.fromAddr)}
+                          </span>
+                          {tag && (
+                            <span className="shrink-0 rounded-full bg-teal/15 px-2 py-0.5 text-[10px] font-medium text-teal">
+                              {tag}
+                            </span>
+                          )}
                         </span>
                         <span className="shrink-0 text-xs tabular-nums text-slate">{fmtDate(m.date)}</span>
                       </div>

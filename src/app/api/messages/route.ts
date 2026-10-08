@@ -38,6 +38,7 @@ export async function GET(req: NextRequest) {
     offset,
     columns: {
       id: true,
+      mailboxId: true,
       fromAddr: true,
       fromName: true,
       toAddrs: true,
