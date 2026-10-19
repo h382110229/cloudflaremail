@@ -37,9 +37,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  const to = (body.to ?? []).map((s) => s.trim()).filter(Boolean);
-  const cc = (body.cc ?? []).map((s) => s.trim()).filter(Boolean);
-  const bcc = (body.bcc ?? []).map((s) => s.trim()).filter(Boolean);
+  // to/cc/bcc 允许传字符串或数组，统一归一化为数组
+  const arr = (v: unknown): string[] =>
+    Array.isArray(v) ? v : typeof v === "string" ? [v] : [];
+  const to = arr(body.to).map((s) => s.trim()).filter(Boolean);
+  const cc = arr(body.cc).map((s) => s.trim()).filter(Boolean);
+  const bcc = arr(body.bcc).map((s) => s.trim()).filter(Boolean);
   const subject = (body.subject ?? "").trim();
   if (to.length === 0) {
     return NextResponse.json({ error: "收件人不能为空" }, { status: 400 });
